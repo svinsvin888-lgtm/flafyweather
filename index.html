@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Погода</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root{--bg:var(--tg-theme-bg-color,#eef2f6);--tx:var(--tg-theme-text-color,#112033);--sub:var(--tg-theme-hint-color,#677789);--card:var(--tg-theme-secondary-bg-color,#fff);--line:rgba(120,135,155,.22);color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--bg:var(--tg-theme-bg-color,#0e1621);--tx:var(--tg-theme-text-color,#e8eef6);--sub:var(--tg-theme-hint-color,#8a9bb0);--card:var(--tg-theme-secondary-bg-color,#17212e)}}
+*{box-sizing:border-box;margin:0}
+html,body{background:var(--bg);color:var(--tx);font:15px/1.4 -apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;-webkit-tap-highlight-color:transparent}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+button:focus-visible,input:focus-visible{outline:2px solid #4aa3ff;outline-offset:2px}
+main{max-width:520px;margin:0 auto;padding-bottom:calc(24px + env(safe-area-inset-bottom,0px))}
+.hero{color:#fff;padding:calc(16px + env(safe-area-inset-top,0px)) 20px 26px;border-radius:0 0 32px 32px;background:linear-gradient(165deg,#2b7de0,#8fd0ff);transition:background .6s}
+.city{display:inline-flex;gap:6px;align-items:center;font-size:17px;font-weight:600;padding:6px 12px 6px 10px;border-radius:99px;background:rgba(255,255,255,.2)}
+.temp{font-size:104px;font-weight:200;letter-spacing:-.05em;line-height:1;margin:22px 0 6px -4px;font-variant-numeric:tabular-nums}
+.cond{font-size:20px}
+.meta{margin-top:8px;opacity:.88;font-size:14px}
+h2{font-size:14px;font-weight:600;color:var(--sub);margin:22px 20px 8px}
+.strip{display:flex;gap:6px;overflow-x:auto;padding:0 20px 4px;scrollbar-width:none}
+.strip::-webkit-scrollbar{display:none}
+.h{flex:0 0 60px;text-align:center;padding:10px 0;border-radius:18px;background:var(--card)}
+.h i{display:block;font-style:normal;font-size:12px;color:var(--sub);min-height:16px}
+.h .e{font-size:22px;margin:4px 0}
+.h b{display:block;font-weight:600;font-size:16px}
+.days{margin:0 12px;background:var(--card);border-radius:24px;overflow:hidden}
+.d+.d{border-top:1px solid var(--line)}
+.row{width:100%;display:grid;grid-template-columns:88px 26px 38px 1fr 38px;gap:6px;align-items:center;text-align:left;padding:12px 14px}
+.row small{display:block;font-size:12px;color:var(--sub)}
+.row .mn{text-align:right;color:var(--sub)}
+.trk{position:relative;height:6px;border-radius:3px;background:var(--line)}
+.bar{position:absolute;top:0;bottom:0;border-radius:3px;background:linear-gradient(90deg,#5eb2ff,#ffb347)}
+.det{display:none;padding:0 14px 12px;color:var(--sub);font-size:14px}
+.open .det{display:block}
+footer{display:flex;justify-content:space-between;align-items:center;margin:16px 20px 0;color:var(--sub);font-size:13px}
+footer button{padding:8px 14px;border-radius:99px;background:var(--card);color:var(--tx)}
+.sheet{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:flex-end;opacity:0;pointer-events:none;transition:opacity .2s}
+.sheet.on{opacity:1;pointer-events:auto}
+.panel{width:100%;max-width:520px;margin:0 auto;max-height:82vh;overflow:auto;background:var(--bg);border-radius:26px 26px 0 0;padding:16px 16px calc(18px + env(safe-area-inset-bottom,0px));transform:translateY(30px);transition:transform .25s}
+.sheet.on .panel{transform:none}
+input{width:100%;font:inherit;color:var(--tx);background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.geo{margin-top:8px;padding:10px 4px;color:#2b7de0}
+.tabs{display:flex;gap:6px;overflow-x:auto;margin:8px 0;scrollbar-width:none}
+.tab{flex:none;padding:7px 12px;border-radius:99px;background:var(--card)}
+.tab.cur{background:#2b7de0;color:#fff}
+.grid{display:flex;flex-wrap:wrap;gap:6px}
+.chip{padding:9px 13px;border-radius:14px;background:var(--card)}
+#res button{display:block;width:100%;text-align:left;padding:11px 4px;border-bottom:1px solid var(--line)}
+.msg{color:var(--sub);padding:10px 4px}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<main>
+  <header class="hero" id="hero">
+    <button class="city" id="cityBtn" aria-label="Выбрать город">📍 <span id="cityName">Москва</span> ▾</button>
+    <div class="temp" id="temp">--</div>
+    <div class="cond" id="cond">Загружаю прогноз…</div>
+    <div class="meta" id="meta"></div>
+  </header>
+  <h2>Ближайшие 24 часа</h2>
+  <section class="strip" id="hours"></section>
+  <h2>Прогноз на 7 дней</h2>
+  <section class="days" id="days"></section>
+  <footer><span id="upd"></span><button id="refresh">Обновить</button></footer>
+</main>
+
+<div class="sheet" id="sheet">
+  <div class="panel">
+    <input id="q" placeholder="Найти город" autocomplete="off">
+    <button class="geo" id="geo">📍 Моё местоположение</button>
+    <div id="res"></div>
+    <div class="tabs" id="tabs"></div>
+    <div class="grid" id="list"></div>
+  </div>
+</div>
+
+<script>
+const $=s=>document.querySelector(s);
+const tg=window.Telegram&&window.Telegram.WebApp;
+try{if(tg){tg.ready();tg.expand()}}catch(e){}
+
+const G=[
+["🇷🇺 Россия","Москва,55.76,37.62;Санкт-Петербург,59.94,30.31;Новосибирск,55.03,82.92;Екатеринбург,56.84,60.61;Казань,55.79,49.12;Нижний Новгород,56.33,44.00;Челябинск,55.16,61.40;Самара,53.20,50.15;Омск,54.99,73.37;Ростов-на-Дону,47.24,39.71;Уфа,54.74,55.97;Красноярск,56.01,92.85;Воронеж,51.67,39.18;Пермь,58.01,56.23;Волгоград,48.71,44.51;Краснодар,45.04,38.98;Саратов,51.53,46.03;Тюмень,57.15,65.53;Иркутск,52.29,104.30;Хабаровск,48.48,135.08;Владивосток,43.12,131.89;Сочи,43.60,39.73;Калининград,54.71,20.51;Мурманск,68.97,33.09;Якутск,62.03,129.73;Томск,56.50,84.97;Тула,54.19,37.62;Ярославль,57.63,39.87;Махачкала,42.98,47.50;Архангельск,64.54,40.54"],
+["🌍 СНГ","Минск,53.90,27.57;Киев,50.45,30.52;Харьков,49.99,36.23;Одесса,46.48,30.73;Алматы,43.24,76.89;Астана,51.17,71.43;Ташкент,41.30,69.24;Баку,40.41,49.87;Тбилиси,41.72,44.79;Ереван,40.18,44.51;Бишкек,42.87,74.59;Кишинёв,47.01,28.86"],
+["🇪🇺 Европа","Лондон,51.51,-0.13;Париж,48.86,2.35;Берлин,52.52,13.40;Мадрид,40.42,-3.70;Рим,41.90,12.50;Прага,50.08,14.44;Варшава,52.23,21.01;Амстердам,52.37,4.90;Вена,48.21,16.37;Стамбул,41.01,28.98;Афины,37.98,23.73;Хельсинки,60.17,24.94;Лиссабон,38.72,-9.14"],
+["🌏 Азия","Пекин,39.90,116.41;Шанхай,31.23,121.47;Токио,35.68,139.69;Сеул,37.57,126.98;Бангкок,13.76,100.50;Сингапур,1.35,103.82;Дели,28.61,77.21;Дубай,25.20,55.27;Тель-Авив,32.08,34.78;Ханой,21.03,105.85"],
+["🌎 Мир","Нью-Йорк,40.71,-74.01;Лос-Анджелес,34.05,-118.24;Торонто,43.65,-79.38;Мехико,19.43,-99.13;Сан-Паулу,-23.55,-46.63;Каир,30.04,31.24;Хургада,27.26,33.81;Кейптаун,-33.92,18.42;Сидней,-33.87,151.21"]
+].map(g=>[g[0],g[1].split(";").map(s=>{const p=s.split(",");return [p[0],+p[1],+p[2]]})]);
+
+const WC={0:["☀️","Ясно"],1:["🌤","Малооблачно"],2:["⛅","Переменная облачность"],3:["☁️","Пасмурно"],45:["🌫","Туман"],48:["🌫","Изморозь"],51:["🌦","Лёгкая морось"],53:["🌦","Морось"],55:["🌦","Сильная морось"],56:["🌧","Ледяная морось"],57:["🌧","Ледяная морось"],61:["🌧","Небольшой дождь"],63:["🌧","Дождь"],65:["🌧","Сильный дождь"],66:["🌧","Ледяной дождь"],67:["🌧","Ледяной дождь"],71:["🌨","Небольшой снег"],73:["🌨","Снег"],75:["❄️","Сильный снег"],77:["🌨","Снежные зёрна"],80:["🌦","Ливень"],81:["🌧","Сильный ливень"],82:["⛈","Очень сильный ливень"],85:["🌨","Снегопад"],86:["❄️","Сильный снегопад"],95:["⛈","Гроза"],96:["⛈","Гроза с градом"],99:["⛈","Сильная гроза с градом"]};
+const P={clear:[["#2b7de0","#8fd0ff"],["#0c1a3a","#2b4380"]],part:[["#4f8fd8","#b2d0ea"],["#18284d","#44588a"]],cloud:[["#6c7f95","#b4c1cf"],["#262f40","#576480"]],fog:[["#8794a1","#c5cdd4"],["#2d3540","#5d6975"]],rain:[["#46607b","#8196ae"],["#1a2433","#3f4f66"]],snow:[["#8ea6bd","#d7e1ea"],["#2b3a4e","#62748a"]],storm:[["#3b3860","#756a9c"],["#16142d","#463e6e"]]};
+const DIR=["С","СВ","В","ЮВ","Ю","ЮЗ","З","СЗ"];
+
+const wc=c=>WC[c]||["🌡","Погода"];
+function kind(c){if(c<=1)return"clear";if(c===2)return"part";if(c===3)return"cloud";if(c<=48)return"fog";if(c>=95)return"storm";if((c>=71&&c<=77)||c===85||c===86)return"snow";return"rain"}
+function tf(v){if(v==null)return"?";const r=Math.round(v);return(r>0?"+":r<0?"−":"")+Math.abs(r)+"°"}
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+let place={n:"Москва",la:55.76,lo:37.62},stamp=0,busy=false,has=false;
+try{const s=JSON.parse(localStorage.getItem("wx"));if(s&&s.n&&s.la!=null)place=s}catch(e){}
+
+function render(d,name){
+  const c=d.current,dl=d.daily,h=d.hourly,w=wc(c.weather_code);
+  const pal=P[kind(c.weather_code)][c.is_day===1?0:1];
+  $("#hero").style.background="linear-gradient(165deg,"+pal[0]+","+pal[1]+")";
+  try{if(tg&&tg.setHeaderColor)tg.setHeaderColor(pal[0])}catch(e){}
+  $("#cityName").textContent=name;
+  $("#temp").textContent=tf(c.temperature_2m);
+  $("#cond").textContent=w[0]+" "+w[1];
+  $("#meta").textContent="Ощущается как "+tf(c.apparent_temperature)+", ветер "+Math.round(c.wind_speed_10m)+" м/с";
+
+  const key=c.time.slice(0,13);
+  let s=h.time.findIndex(t=>t.slice(0,13)>=key);if(s<0)s=0;
+  let out="";
+  for(let i=s;i<s+24&&i<h.time.length;i++){
+    const p=h.precipitation_probability[i];
+    out+='<div class="h"><i>'+(i===s?"сейчас":h.time[i].slice(11,16))+'</i><div class="e">'+wc(h.weather_code[i])[0]+'</div><b>'+tf(h.temperature_2m[i])+'</b><i>'+(p>=20?"💧"+p+"%":"")+'</i></div>';
+  }
+  $("#hours").innerHTML=out;
+
+  const lo=Math.min.apply(null,dl.temperature_2m_min),hi=Math.max.apply(null,dl.temperature_2m_max),span=Math.max(hi-lo,1);
+  let ds="";
+  for(let i=0;i<dl.time.length;i++){
+    const p=dl.time[i].split("-"),dt=new Date(+p[0],+p[1]-1,+p[2]);
+    const label=i===0?"Сегодня":i===1?"Завтра":dt.toLocaleDateString("ru-RU",{weekday:"short",day:"numeric",month:"short"});
+    const dw=wc(dl.weather_code[i]),mn=dl.temperature_2m_min[i],mx=dl.temperature_2m_max[i];
+    const pr=dl.precipitation_probability_max[i],pm=dl.precipitation_sum[i];
+    const left=(mn-lo)/span*100,wid=Math.max((mx-mn)/span*100,4);
+    const dir=dl.wind_direction_10m_dominant[i];
+    const dname=dir==null?"":DIR[Math.floor((dir+22.5)/45)%8]+", ";
+    ds+='<div class="d"><button class="row"><span>'+esc(label)+'<small>'+(pr>=20?"💧 "+pr+"%":"&nbsp;")+'</small></span><span>'+dw[0]+'</span><span class="mn">'+tf(mn)+'</span><span class="trk"><span class="bar" style="left:'+left+'%;width:'+wid+'%"></span></span><span>'+tf(mx)+'</span></button>'
+      +'<div class="det">'+dw[1]+'<br>Осадки: '+(pm>=0.1?String(Math.round(pm*10)/10).replace(".",",")+" мм":"нет")+(pr!=null?", вероятность "+pr+"%":"")
+      +'<br>Ветер: '+dname+Math.round(dl.wind_speed_10m_max[i])+" м/с"+(dl.wind_gusts_10m_max[i]!=null?", порывы до "+Math.round(dl.wind_gusts_10m_max[i])+" м/с":"")+'</div></div>';
+  }
+  $("#days").innerHTML=ds;
+}
+
+function setUpd(t){$("#upd").textContent=t}
+function hhmm(){const d=new Date();return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0")}
+
+async function load(silent){
+  if(busy)return;busy=true;
+  if(!has){$("#cityName").textContent=place.n;$("#cond").textContent="Загружаю прогноз…";$("#meta").textContent=""}
+  try{
+    const u="https://api.open-meteo.com/v1/forecast?latitude="+place.la+"&longitude="+place.lo
+      +"&current=temperature_2m,apparent_temperature,wind_speed_10m,weather_code,is_day"
+      +"&hourly=temperature_2m,weather_code,precipitation_probability"
+      +"&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant"
+      +"&wind_speed_unit=ms&timezone=auto&forecast_days=7";
+    const r=await fetch(u);if(!r.ok)throw 0;
+    const d=await r.json();if(!d.daily||!d.current)throw 0;
+    render(d,place.n);has=true;stamp=Date.now();setUpd("Обновлено в "+hhmm());
+  }catch(e){
+    if(!has){$("#temp").textContent="--";$("#cond").textContent="Не удалось получить прогноз";$("#meta").textContent="Проверь связь и нажми «Обновить»"}
+    else setUpd("Не удалось обновить, показан прошлый прогноз");
+  }
+  busy=false;
+}
+
+$("#refresh").onclick=()=>load(false);
+setInterval(()=>{if(!document.hidden)load(true)},600000);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden&&Date.now()-stamp>300000)load(true)});
+
+const sheet=$("#sheet"),q=$("#q"),res=$("#res");
+let found=[],tab=0,tm;
+function pick(n,la,lo){
+  place={n:n,la:la,lo:lo};
+  try{localStorage.setItem("wx",JSON.stringify(place))}catch(e){}
+  has=false;sheet.classList.remove("on");load(false);
+}
+function drawTabs(){
+  $("#tabs").innerHTML=G.map((g,i)=>'<button class="tab'+(i===tab?" cur":"")+'" data-i="'+i+'">'+esc(g[0])+'</button>').join("");
+  $("#list").innerHTML=G[tab][1].map((c,i)=>'<button class="chip" data-i="'+i+'">'+esc(c[0])+'</button>').join("");
+}
+$("#cityBtn").onclick=()=>{q.value="";res.innerHTML="";drawTabs();sheet.classList.add("on")};
+sheet.onclick=e=>{if(e.target===sheet)sheet.classList.remove("on")};
+$("#tabs").onclick=e=>{const b=e.target.closest("button");if(b){tab=+b.dataset.i;drawTabs()}};
+$("#list").onclick=e=>{const b=e.target.closest("button");if(b){const c=G[tab][1][+b.dataset.i];pick(c[0],c[1],c[2])}};
+res.onclick=e=>{const b=e.target.closest("button");if(b){const f=found[+b.dataset.i];pick(f[0],f[1],f[2])}};
+
+q.oninput=()=>{
+  clearTimeout(tm);const v=q.value.trim();
+  if(v.length<2){res.innerHTML="";return}
+  tm=setTimeout(()=>find(v),350);
+};
+async function find(v){
+  try{
+    const r=await fetch("https://geocoding-api.open-meteo.com/v1/search?name="+encodeURIComponent(v)+"&count=6&language=ru&format=json");
+    const j=await r.json();
+    found=(j.results||[]).map(x=>[x.name,x.latitude,x.longitude,[x.name,x.admin1,x.country].filter(Boolean).join(", ")]);
+    res.innerHTML=found.length?found.map((f,i)=>'<button data-i="'+i+'">'+esc(f[3])+'</button>').join(""):'<p class="msg">Не нашёл «'+esc(v)+'». Попробуй написать иначе.</p>';
+  }catch(e){res.innerHTML='<p class="msg">Поиск недоступен. Проверь связь.</p>'}
+}
+$("#geo").onclick=()=>{
+  if(!navigator.geolocation){res.innerHTML='<p class="msg">Геопозиция недоступна. Найди город через поиск.</p>';return}
+  navigator.geolocation.getCurrentPosition(p=>pick("Моё место",p.coords.latitude,p.coords.longitude),()=>{res.innerHTML='<p class="msg">Нет доступа к геопозиции. Найди город через поиск.</p>'},{timeout:10000});
+};
+
+load(false);
+</script>
+</body>
+</html>
